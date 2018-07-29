@@ -681,7 +681,6 @@ func postIndex(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-// fixme: ファイルにはきたい
 func getImage(c web.C, w http.ResponseWriter, r *http.Request) {
 	pidStr := c.URLParams["id"]
 	pid, err := strconv.Atoi(pidStr)
@@ -798,27 +797,12 @@ func postAdminBanned(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	// fixme: 最初からlocalhostで良さそう
-	host := os.Getenv("ISUCONP_DB_HOST")
-	if host == "" {
-		host = "localhost"
-	}
-	port := os.Getenv("ISUCONP_DB_PORT")
-	if port == "" {
-		port = "3306"
-	}
-	_, err := strconv.Atoi(port)
-	if err != nil {
-		log.Fatalf("Failed to read DB port number from an environment variable ISUCONP_DB_PORT.\nError: %s", err.Error())
-	}
-	user := os.Getenv("ISUCONP_DB_USER")
-	if user == "" {
-		user = "root"
-	}
+	host = "localhost"
+	port = "3306"
+	user = "root"
+	dbname = "isuconp"
+
 	password := os.Getenv("ISUCONP_DB_PASSWORD")
-	dbname := os.Getenv("ISUCONP_DB_NAME")
-	if dbname == "" {
-		dbname = "isuconp"
-	}
 
 	dsn := fmt.Sprintf(
 		"%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=true&loc=Local",
@@ -842,8 +826,6 @@ func main() {
 	goji.Post("/register", postRegister)
 	goji.Get("/logout", getLogout)
 	goji.Get("/", getIndex)
-	// fixme: ここ下に持って行ってみる
-	goji.Get(regexp.MustCompile(`^/@(?P<accountName>[a-zA-Z]+)$`), getAccountName)
 	goji.Get("/posts", getPosts)
 	goji.Get("/posts/:id", getPostsID)
 	goji.Post("/", postIndex)
@@ -852,5 +834,7 @@ func main() {
 	goji.Get("/admin/banned", getAdminBanned)
 	goji.Post("/admin/banned", postAdminBanned)
 	goji.Get("/*", http.FileServer(http.Dir("../public")))
+	// fixme: ここ下に持って行ってみる
+	goji.Get(regexp.MustCompile(`^/@(?P<accountName>[a-zA-Z]+)$`), getAccountName)
 	goji.Serve()
 }
