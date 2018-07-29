@@ -182,7 +182,7 @@ func makePosts(results []Post, CSRFToken string, allComments bool) ([]Post, erro
 	var posts []Post
 
 	for _, p := range results {
-		err := db.Get(&p.CommentCount, "SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?", p.ID)
+		err := db.Get(&p.CommentCount, "SELECT COUNT(1) AS `count` FROM `comments` WHERE `post_id` = ?", p.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -197,6 +197,7 @@ func makePosts(results []Post, CSRFToken string, allComments bool) ([]Post, erro
 			return nil, cerr
 		}
 
+		// fixme: n + 1
 		for i := 0; i < len(comments); i++ {
 			uerr := db.Get(&comments[i].User, "SELECT * FROM `users` WHERE `id` = ?", comments[i].UserID)
 			if uerr != nil {
@@ -451,7 +452,7 @@ func getAccountName(c web.C, w http.ResponseWriter, r *http.Request) {
 	}
 
 	commentCount := 0
-	cerr := db.Get(&commentCount, "SELECT COUNT(*) AS count FROM `comments` WHERE `user_id` = ?", user.ID)
+	cerr := db.Get(&commentCount, "SELECT COUNT(1) AS count FROM `comments` WHERE `user_id` = ?", user.ID)
 	if cerr != nil {
 		fmt.Println(cerr)
 		return
@@ -479,7 +480,7 @@ func getAccountName(c web.C, w http.ResponseWriter, r *http.Request) {
 			args[i] = v
 		}
 
-		ccerr := db.Get(&commentedCount, "SELECT COUNT(*) AS count FROM `comments` WHERE `post_id` IN ("+placeholder+")", args...)
+		ccerr := db.Get(&commentedCount, "SELECT COUNT(1) AS count FROM `comments` WHERE `post_id` IN ("+placeholder+")", args...)
 		if ccerr != nil {
 			fmt.Println(ccerr)
 			return
@@ -619,15 +620,19 @@ func postIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	mime := ""
+	ext := ""
 	if file != nil {
 		// 投稿のContent-Typeからファイルのタイプを決定する
 		contentType := header.Header["Content-Type"][0]
 		if strings.Contains(contentType, "jpeg") {
 			mime = "image/jpeg"
+			ext = "jpg"
 		} else if strings.Contains(contentType, "png") {
 			mime = "image/png"
+			ext = "png"
 		} else if strings.Contains(contentType, "gif") {
 			mime = "image/gif"
+			ext = "gif"
 		} else {
 			session := getSession(r)
 			session.Values["notice"] = "投稿できる画像形式はjpgとpngとgifだけです"
@@ -652,12 +657,11 @@ func postIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := "INSERT INTO `posts` (`user_id`, `mime`, `imgdata`, `body`) VALUES (?,?,?,?)"
+	query := "INSERT INTO `posts` (`user_id`, `mime`, `body`) VALUES (?,?,?)"
 	result, eerr := db.Exec(
 		query,
 		me.ID,
 		mime,
-		filedata,
 		r.FormValue("body"),
 	)
 	if eerr != nil {
@@ -670,6 +674,8 @@ func postIndex(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(lerr.Error())
 		return
 	}
+	// ファイル書き出し
+	ioutil.WriteFile("../public/image/" + strconv.Itoa(pid) + "." + ext, filedata, 0644)
 
 	http.Redirect(w, r, "/posts/"+strconv.FormatInt(pid, 10), http.StatusFound)
 	return
@@ -684,7 +690,7 @@ func getImage(c web.C, w http.ResponseWriter, r *http.Request) {
 	}
 
 	post := Post{}
-	derr := db.Get(&post, "SELECT * FROM `posts` WHERE `id` = ?", pid)
+	derr := db.Get(&post, "SELECT `mime`, `imgdata` FROM `posts` WHERE `id` = ?", pid)
 	if derr != nil {
 		fmt.Println(derr.Error())
 		return
@@ -695,7 +701,10 @@ func getImage(c web.C, w http.ResponseWriter, r *http.Request) {
 	if ext == "jpg" && post.Mime == "image/jpeg" ||
 		ext == "png" && post.Mime == "image/png" ||
 		ext == "gif" && post.Mime == "image/gif" {
+		// ファイル吐き出し
+		go ioutil.WriteFile("../public/image/" + pidStr + "." + ext, post.Imgdata, 0644)
 		w.Header().Set("Content-Type", post.Mime)
+        w.Header().Set("Cache-Control", "max-age=2592000, public, must-revalidate")
 		_, err := w.Write(post.Imgdata)
 		if err != nil {
 			fmt.Println(err.Error())
@@ -787,27 +796,13 @@ func postAdminBanned(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	host := os.Getenv("ISUCONP_DB_HOST")
-	if host == "" {
-		host = "localhost"
-	}
-	port := os.Getenv("ISUCONP_DB_PORT")
-	if port == "" {
-		port = "3306"
-	}
-	_, err := strconv.Atoi(port)
-	if err != nil {
-		log.Fatalf("Failed to read DB port number from an environment variable ISUCONP_DB_PORT.\nError: %s", err.Error())
-	}
-	user := os.Getenv("ISUCONP_DB_USER")
-	if user == "" {
-		user = "root"
-	}
+	// fixme: 最初からlocalhostで良さそう
+	host = "localhost"
+	port = "3306"
+	user = "root"
+	dbname = "isuconp"
+
 	password := os.Getenv("ISUCONP_DB_PASSWORD")
-	dbname := os.Getenv("ISUCONP_DB_NAME")
-	if dbname == "" {
-		dbname = "isuconp"
-	}
 
 	dsn := fmt.Sprintf(
 		"%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=true&loc=Local",
@@ -831,7 +826,6 @@ func main() {
 	goji.Post("/register", postRegister)
 	goji.Get("/logout", getLogout)
 	goji.Get("/", getIndex)
-	goji.Get(regexp.MustCompile(`^/@(?P<accountName>[a-zA-Z]+)$`), getAccountName)
 	goji.Get("/posts", getPosts)
 	goji.Get("/posts/:id", getPostsID)
 	goji.Post("/", postIndex)
@@ -840,5 +834,7 @@ func main() {
 	goji.Get("/admin/banned", getAdminBanned)
 	goji.Post("/admin/banned", postAdminBanned)
 	goji.Get("/*", http.FileServer(http.Dir("../public")))
+	// fixme: ここ下に持って行ってみる
+	goji.Get(regexp.MustCompile(`^/@(?P<accountName>[a-zA-Z]+)$`), getAccountName)
 	goji.Serve()
 }
