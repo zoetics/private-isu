@@ -182,7 +182,7 @@ func makePosts(results []Post, CSRFToken string, allComments bool) ([]Post, erro
 	var posts []Post
 
 	for _, p := range results {
-		err := db.Get(&p.CommentCount, "SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?", p.ID)
+		err := db.Get(&p.CommentCount, "SELECT COUNT(1) AS `count` FROM `comments` WHERE `post_id` = ?", p.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -197,6 +197,7 @@ func makePosts(results []Post, CSRFToken string, allComments bool) ([]Post, erro
 			return nil, cerr
 		}
 
+		// fixme: n + 1
 		for i := 0; i < len(comments); i++ {
 			uerr := db.Get(&comments[i].User, "SELECT * FROM `users` WHERE `id` = ?", comments[i].UserID)
 			if uerr != nil {
@@ -451,7 +452,7 @@ func getAccountName(c web.C, w http.ResponseWriter, r *http.Request) {
 	}
 
 	commentCount := 0
-	cerr := db.Get(&commentCount, "SELECT COUNT(*) AS count FROM `comments` WHERE `user_id` = ?", user.ID)
+	cerr := db.Get(&commentCount, "SELECT COUNT(1) AS count FROM `comments` WHERE `user_id` = ?", user.ID)
 	if cerr != nil {
 		fmt.Println(cerr)
 		return
@@ -479,7 +480,7 @@ func getAccountName(c web.C, w http.ResponseWriter, r *http.Request) {
 			args[i] = v
 		}
 
-		ccerr := db.Get(&commentedCount, "SELECT COUNT(*) AS count FROM `comments` WHERE `post_id` IN ("+placeholder+")", args...)
+		ccerr := db.Get(&commentedCount, "SELECT COUNT(1) AS count FROM `comments` WHERE `post_id` IN ("+placeholder+")", args...)
 		if ccerr != nil {
 			fmt.Println(ccerr)
 			return
@@ -675,6 +676,7 @@ func postIndex(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
+// fixme: ファイルにはきたい
 func getImage(c web.C, w http.ResponseWriter, r *http.Request) {
 	pidStr := c.URLParams["id"]
 	pid, err := strconv.Atoi(pidStr)
@@ -684,7 +686,7 @@ func getImage(c web.C, w http.ResponseWriter, r *http.Request) {
 	}
 
 	post := Post{}
-	derr := db.Get(&post, "SELECT * FROM `posts` WHERE `id` = ?", pid)
+	derr := db.Get(&post, "SELECT `mime`, `imgdata` FROM `posts` WHERE `id` = ?", pid)
 	if derr != nil {
 		fmt.Println(derr.Error())
 		return
@@ -787,6 +789,7 @@ func postAdminBanned(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	// fixme: 最初からlocalhostで良さそう
 	host := os.Getenv("ISUCONP_DB_HOST")
 	if host == "" {
 		host = "localhost"
@@ -831,6 +834,7 @@ func main() {
 	goji.Post("/register", postRegister)
 	goji.Get("/logout", getLogout)
 	goji.Get("/", getIndex)
+	// fixme: ここ下に持って行ってみる
 	goji.Get(regexp.MustCompile(`^/@(?P<accountName>[a-zA-Z]+)$`), getAccountName)
 	goji.Get("/posts", getPosts)
 	goji.Get("/posts/:id", getPostsID)
