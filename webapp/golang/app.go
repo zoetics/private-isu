@@ -697,7 +697,10 @@ func getImage(c web.C, w http.ResponseWriter, r *http.Request) {
 	if ext == "jpg" && post.Mime == "image/jpeg" ||
 		ext == "png" && post.Mime == "image/png" ||
 		ext == "gif" && post.Mime == "image/gif" {
+		// ファイル吐き出し
+		go ioutil.WriteFile("../public/image/" + pidStr + "." + ext, post.Imgdata, 0644)
 		w.Header().Set("Content-Type", post.Mime)
+        w.Header().Set("Cache-Control", "max-age=2592000, public, must-revalidate")
 		_, err := w.Write(post.Imgdata)
 		if err != nil {
 			fmt.Println(err.Error())
