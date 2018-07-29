@@ -620,15 +620,19 @@ func postIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	mime := ""
+	ext := ""
 	if file != nil {
 		// 投稿のContent-Typeからファイルのタイプを決定する
 		contentType := header.Header["Content-Type"][0]
 		if strings.Contains(contentType, "jpeg") {
 			mime = "image/jpeg"
+			ext = "jpg"
 		} else if strings.Contains(contentType, "png") {
 			mime = "image/png"
+			ext = "png"
 		} else if strings.Contains(contentType, "gif") {
 			mime = "image/gif"
+			ext = "gif"
 		} else {
 			session := getSession(r)
 			session.Values["notice"] = "投稿できる画像形式はjpgとpngとgifだけです"
@@ -653,12 +657,11 @@ func postIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := "INSERT INTO `posts` (`user_id`, `mime`, `imgdata`, `body`) VALUES (?,?,?,?)"
+	query := "INSERT INTO `posts` (`user_id`, `mime`, `body`) VALUES (?,?,?)"
 	result, eerr := db.Exec(
 		query,
 		me.ID,
 		mime,
-		filedata,
 		r.FormValue("body"),
 	)
 	if eerr != nil {
@@ -671,6 +674,8 @@ func postIndex(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(lerr.Error())
 		return
 	}
+	// ファイル書き出し
+	ioutil.WriteFile("../public/image/" + strconv.Itoa(pid) + "." + ext, filedata, 0644)
 
 	http.Redirect(w, r, "/posts/"+strconv.FormatInt(pid, 10), http.StatusFound)
 	return
